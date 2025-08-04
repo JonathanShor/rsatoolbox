@@ -100,7 +100,7 @@ def get_volume_searchlight(mask, radius=2, threshold=1.0):
     return centers, neighbors
 
 
-def get_searchlight_RDMs(data_2d, centers, neighbors, events, method="correlation", verbose=True):
+def get_searchlight_RDMs(data, centers, neighbors, events, method="correlation"):
     """Iterates over all the searchlight centers and calculates the RDM
 
     Args:
@@ -120,8 +120,6 @@ def get_searchlight_RDMs(data_2d, centers, neighbors, events, method="correlatio
 
         method (str, optional): distance metric,
         see rsatoolbox.rdm.calc for options. Defaults to 'correlation'.
-
-        verbose (bool, optional): Defaults to True.
 
     Returns:
         RDM [rsatoolbox.rdm.RDMs]: RDMs object with the RDM for each searchlight
