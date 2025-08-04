@@ -192,11 +192,18 @@ def get_searchlight_RDMs(
             for chunks in tqdm(chunked_center, desc="Calculating RDMs...")
         ]
     else:
+        # TODO: Tune this chunking. Even with the default of 100 centers per chunked_center, the
+        # overhead per process is too high to give only one to each TQDM process. Modified from
+        # https://stackoverflow.com/a/42096963/5722359, which is for a different task.
+        parallelChunkSize = 20 + (
+            int(len(chunked_center) / maxWorkers / 5) if len(chunked_center) > 1000 else 0
+        )
         RDM_corrs = process_map(
             fixed_parallel_function,
             chunked_center,
             desc="Calculating RDMs...",
             max_workers=maxWorkers,
+            chunksize=parallelChunkSize,
             smoothing=0,
         )
 
