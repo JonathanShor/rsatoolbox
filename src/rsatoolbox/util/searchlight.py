@@ -134,61 +134,36 @@ def get_searchlight_RDMs(data, centers, neighbors, events, method="correlation",
     n_centers = centers.shape[0]
     rdm_events = []
 
-    # For memory reasons, we chunk the data if we have more than 1000 RDMs
-    if n_centers > 1000:
-        # we can't run all centers at once, that will take too much memory
-        # so lets to some chunking
-        chunked_center = np.array_split(np.arange(n_centers), n_centers // chunksize + 1)
+    # we can't run all centers at once, that will take too much memory
+    # so lets to some chunking
+    chunked_center = np.array_split(np.arange(n_centers), n_centers // chunksize + 1)
 
-        # loop over chunks
-        n_conds = len(np.unique(events))
-        RDM = np.zeros((n_centers, n_conds * (n_conds - 1) // 2))
-        for chunks in tqdm(chunked_center, desc="Calculating RDMs..."):
-            center_data = []
-            for c in chunks:
-                # grab this center and neighbors
-                center = centers[c]
-                center_neighbors = neighbors[c]
-                # create a database object with this data
-                ds = Dataset(
-                    data_2d[:, center_neighbors],
-                    descriptors={"center": center},
-                    obs_descriptors={"events": events},
-                    channel_descriptors={"voxels": center_neighbors},
-                )
-                center_data.append(ds)
-
-            RDM_corr = calc_rdm(center_data, method=method, descriptor="events")
-            if rdm_events:
-                assert (
-                    rdm_events == RDM_corr.pattern_descriptors["events"]
-                ), "RDMs from different chunks have different event descriptors."
-            else:
-                rdm_events = RDM_corr.pattern_descriptors["events"]
-            RDM[chunks, :] = RDM_corr.dissimilarities
-    else:
+    # loop over chunks
+    n_conds = len(np.unique(events))
+    RDM = np.zeros((n_centers, n_conds * (n_conds - 1) // 2))
+    for chunks in tqdm(chunked_center, desc="Calculating RDMs..."):
         center_data = []
-        for c in range(n_centers):
+        for c in chunks:
             # grab this center and neighbors
             center = centers[c]
-            nb = neighbors[c]
+            center_neighbors = neighbors[c]
             # create a database object with this data
             ds = Dataset(
-                data_2d[:, nb],
-                descriptors={"center": c},
+                data_2d[:, center_neighbors],
+                descriptors={"center": center},
                 obs_descriptors={"events": events},
-                channel_descriptors={"voxels": nb},
+                channel_descriptors={"voxels": center_neighbors},
             )
             center_data.append(ds)
-        # calculate RDMs for each database object
-        RDM = calc_rdm(center_data, method=method, descriptor="events")
+
+        RDM_corr = calc_rdm(center_data, method=method, descriptor="events")
         if rdm_events:
             assert (
-                rdm_events == RDM.pattern_descriptors["events"]
+                rdm_events == RDM_corr.pattern_descriptors["events"]
             ), "RDMs from different chunks have different event descriptors."
         else:
-            rdm_events = RDM.pattern_descriptors["events"]
-        RDM = RDM.dissimilarities
+            rdm_events = RDM_corr.pattern_descriptors["events"]
+        RDM[chunks, :] = RDM_corr.dissimilarities
 
     SL_rdms = RDMs(
         RDM,
