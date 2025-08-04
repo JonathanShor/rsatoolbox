@@ -134,7 +134,7 @@ def _get_chunk_searchlight_RDMs(chunks, data_2d, centers, neighbors, events, met
 
 
 def get_searchlight_RDMs(
-    data, centers, neighbors, events, method="correlation", chunksize=100, maxWorkers=1
+    data, centers, neighbors, events, method="correlation", batchsize=100, maxWorkers=1
 ) -> RDMs:
     """Iterates over all the searchlight centers and calculates the RDM
 
@@ -156,7 +156,7 @@ def get_searchlight_RDMs(
         method (str, optional): distance metric,
         see rsatoolbox.rdm.calc for options. Defaults to 'correlation'.
 
-        chunksize (int, optional): Searchlight center processing batch size. Defaults to 100.
+        batchsize (int, optional): Searchlight center processing batch size. Defaults to 100.
 
         maxWorkers (int, optional): maximum number of parallel workers. Defaults to 1, i.e. no
         parallel processing.
@@ -173,7 +173,7 @@ def get_searchlight_RDMs(
 
     # we can't run all centers at once, that will take too much memory
     # so lets to some chunking
-    chunked_center = np.array_split(np.arange(n_centers), n_centers // chunksize + 1)
+    chunked_center = np.array_split(np.arange(n_centers), n_centers // batchsize + 1)
 
     # loop over chunks
     n_conds = len(np.unique(events))
