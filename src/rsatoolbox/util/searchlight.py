@@ -105,8 +105,10 @@ def get_searchlight_RDMs(data_2d, centers, neighbors, events, method="correlatio
 
     Args:
 
-        data_2d (2D numpy array): brain data,
-        shape n_observations x n_channels (i.e. voxels/vertices)
+        data (2D or 4D numpy array): brain data,
+        either flattened shape n_observations x n_channels (i.e. voxels/vertices),
+        or 4D shape n_observations x x_dim x y_dim x z_dim. Should match the mask used to create
+        centers and neighbors.
 
         centers (1D numpy array): center indices for all searchlights as provided
         by rsatoolbox.util.searchlight.get_volume_searchlight
@@ -126,8 +128,9 @@ def get_searchlight_RDMs(data_2d, centers, neighbors, events, method="correlatio
                               the RDM.rdm_descriptors['voxel_index']
                               describes the center voxel index each RDM is associated with
     """
-
-    data_2d, centers = np.array(data_2d), np.array(centers)
+    if data.ndim == 4:
+        data = data.reshape((len(events), -1))
+    data_2d, centers = np.array(data), np.array(centers)
     n_centers = centers.shape[0]
 
     # For memory reasons, we chunk the data if we have more than 1000 RDMs
