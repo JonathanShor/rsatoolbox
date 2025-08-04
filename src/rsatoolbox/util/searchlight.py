@@ -6,6 +6,8 @@ https://github.com/machow/pysearchlight
 
 @author: Daniel Lindh
 """
+from functools import partial
+
 import numpy as np
 from joblib import Parallel, delayed
 from rsatoolbox.data.dataset import Dataset
@@ -13,6 +15,7 @@ from rsatoolbox.rdm import RDMs
 from rsatoolbox.rdm.calc import calc_rdm
 from scipy.spatial.distance import cdist
 from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map
 
 
 def _get_searchlight_neighbors(mask, center, radius=3):
@@ -100,7 +103,39 @@ def get_volume_searchlight(mask, radius=2, threshold=1.0):
     return centers, neighbors
 
 
-def get_searchlight_RDMs(data, centers, neighbors, events, method="correlation", chunksize=100):
+def _get_chunk_searchlight_RDMs(chunks, data_2d, centers, neighbors, events, method) -> RDMs:
+    """Calculates the RDMs for a chunk of searchlight centers.
+
+    Args:
+        chunks (list): List of chunked center indices.
+
+        data_2d (2D numpy array): Flattened brain data, n_observations x n_channels.
+
+        See get_searchlight_RDMs for the other arguments.
+
+    Returns:
+        RDM [rsatoolbox.rdm.RDMs]: RDMs for the chunk of centers.
+    """
+    center_data = []
+    for c in chunks:
+        # grab this center and neighbors
+        center = centers[c]
+        center_neighbors = neighbors[c]
+        # create a database object with this data
+        ds = Dataset(
+            data_2d[:, center_neighbors],
+            descriptors={"center": center},
+            obs_descriptors={"events": events},
+            channel_descriptors={"voxels": center_neighbors},
+        )
+        center_data.append(ds)
+
+    return calc_rdm(center_data, method=method, descriptor="events")
+
+
+def get_searchlight_RDMs(
+    data, centers, neighbors, events, method="correlation", chunksize=100, maxWorkers=1
+) -> RDMs:
     """Iterates over all the searchlight centers and calculates the RDM
 
     Args:
@@ -123,6 +158,9 @@ def get_searchlight_RDMs(data, centers, neighbors, events, method="correlation",
 
         chunksize (int, optional): Searchlight center processing batch size. Defaults to 100.
 
+        maxWorkers (int, optional): maximum number of parallel workers. Defaults to 1, i.e. no
+        parallel processing.
+
     Returns:
         RDM [rsatoolbox.rdm.RDMs]: RDMs object with the RDM for each searchlight
                               the RDM.rdm_descriptors['voxel_index']
@@ -132,7 +170,6 @@ def get_searchlight_RDMs(data, centers, neighbors, events, method="correlation",
         data = data.reshape((len(events), -1))
     data_2d, centers = np.array(data), np.array(centers)
     n_centers = centers.shape[0]
-    rdm_events = []
 
     # we can't run all centers at once, that will take too much memory
     # so lets to some chunking
@@ -140,23 +177,33 @@ def get_searchlight_RDMs(data, centers, neighbors, events, method="correlation",
 
     # loop over chunks
     n_conds = len(np.unique(events))
-    RDM = np.zeros((n_centers, n_conds * (n_conds - 1) // 2))
-    for chunks in tqdm(chunked_center, desc="Calculating RDMs..."):
-        center_data = []
-        for c in chunks:
-            # grab this center and neighbors
-            center = centers[c]
-            center_neighbors = neighbors[c]
-            # create a database object with this data
-            ds = Dataset(
-                data_2d[:, center_neighbors],
-                descriptors={"center": center},
-                obs_descriptors={"events": events},
-                channel_descriptors={"voxels": center_neighbors},
-            )
-            center_data.append(ds)
+    fixed_parallel_function = partial(
+        _get_chunk_searchlight_RDMs,
+        data_2d=data_2d,
+        centers=centers,
+        neighbors=neighbors,
+        events=events,
+        method=method,
+    )
+    if len(chunked_center) == 1 or maxWorkers == 1:
+        # if we have only one chunk or no parallel processing, run it directly
+        RDM_corrs = [
+            fixed_parallel_function(chunks)
+            for chunks in tqdm(chunked_center, desc="Calculating RDMs...")
+        ]
+    else:
+        RDM_corrs = process_map(
+            fixed_parallel_function,
+            chunked_center,
+            desc="Calculating RDMs...",
+            max_workers=maxWorkers,
+            smoothing=0,
+        )
 
-        RDM_corr = calc_rdm(center_data, method=method, descriptor="events")
+    # Collect the results from all chunks
+    RDM = np.zeros((n_centers, n_conds * (n_conds - 1) // 2))
+    rdm_events: list[str] = []
+    for chunks, RDM_corr in zip(chunked_center, RDM_corrs):
         if rdm_events:
             assert (
                 rdm_events == RDM_corr.pattern_descriptors["events"]
