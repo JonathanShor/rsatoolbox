@@ -100,7 +100,7 @@ def get_volume_searchlight(mask, radius=2, threshold=1.0):
     return centers, neighbors
 
 
-def get_searchlight_RDMs(data, centers, neighbors, events, method="correlation"):
+def get_searchlight_RDMs(data, centers, neighbors, events, method="correlation", chunksize=100):
     """Iterates over all the searchlight centers and calculates the RDM
 
     Args:
@@ -121,6 +121,8 @@ def get_searchlight_RDMs(data, centers, neighbors, events, method="correlation")
         method (str, optional): distance metric,
         see rsatoolbox.rdm.calc for options. Defaults to 'correlation'.
 
+        chunksize (int, optional): Searchlight center processing batch size. Defaults to 100.
+
     Returns:
         RDM [rsatoolbox.rdm.RDMs]: RDMs object with the RDM for each searchlight
                               the RDM.rdm_descriptors['voxel_index']
@@ -136,9 +138,7 @@ def get_searchlight_RDMs(data, centers, neighbors, events, method="correlation")
     if n_centers > 1000:
         # we can't run all centers at once, that will take too much memory
         # so lets to some chunking
-        chunked_center = np.split(
-            np.arange(n_centers), np.linspace(0, n_centers, 101, dtype=int)[1:-1]
-        )
+        chunked_center = np.array_split(np.arange(n_centers), n_centers // chunksize + 1)
 
         # loop over chunks
         n_conds = len(np.unique(events))
