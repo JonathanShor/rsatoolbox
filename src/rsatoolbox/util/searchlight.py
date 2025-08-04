@@ -132,6 +132,7 @@ def get_searchlight_RDMs(data_2d, centers, neighbors, events, method="correlatio
         data = data.reshape((len(events), -1))
     data_2d, centers = np.array(data), np.array(centers)
     n_centers = centers.shape[0]
+    rdm_events = []
 
     # For memory reasons, we chunk the data if we have more than 1000 RDMs
     if n_centers > 1000:
@@ -160,6 +161,12 @@ def get_searchlight_RDMs(data_2d, centers, neighbors, events, method="correlatio
                 center_data.append(ds)
 
             RDM_corr = calc_rdm(center_data, method=method, descriptor="events")
+            if rdm_events:
+                assert (
+                    rdm_events == RDM_corr.pattern_descriptors["events"]
+                ), "RDMs from different chunks have different event descriptors."
+            else:
+                rdm_events = RDM_corr.pattern_descriptors["events"]
             RDM[chunks, :] = RDM_corr.dissimilarities
     else:
         center_data = []
@@ -176,9 +183,21 @@ def get_searchlight_RDMs(data_2d, centers, neighbors, events, method="correlatio
             )
             center_data.append(ds)
         # calculate RDMs for each database object
-        RDM = calc_rdm(center_data, method=method, descriptor="events").dissimilarities
+        RDM = calc_rdm(center_data, method=method, descriptor="events")
+        if rdm_events:
+            assert (
+                rdm_events == RDM.pattern_descriptors["events"]
+            ), "RDMs from different chunks have different event descriptors."
+        else:
+            rdm_events = RDM.pattern_descriptors["events"]
+        RDM = RDM.dissimilarities
 
-    SL_rdms = RDMs(RDM, rdm_descriptors={"voxel_index": centers}, dissimilarity_measure=method)
+    SL_rdms = RDMs(
+        RDM,
+        rdm_descriptors={"voxel_index": centers},
+        dissimilarity_measure=method,
+        pattern_descriptors={"events": rdm_events},
+    )
 
     return SL_rdms
 
