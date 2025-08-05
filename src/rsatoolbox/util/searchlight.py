@@ -13,6 +13,7 @@ from functools import partial
 import numpy as np
 from joblib import Parallel, delayed
 from rsatoolbox.data.dataset import Dataset
+from rsatoolbox.data.noise import prec_from_unbalanced
 from rsatoolbox.rdm import RDMs
 from rsatoolbox.rdm.calc import calc_rdm
 from scipy.spatial.distance import cdist
@@ -113,6 +114,7 @@ def _get_chunk_searchlight_RDMs(
     events: Sequence[Hashable],
     method: str,
     cv_descriptor: Sequence[Hashable] = None,
+    noise: str | Sequence[np.ndarray] | None = None,
     **calcKwargs,
 ) -> RDMs:
     """Calculates the RDMs for a chunk of searchlight centers.
@@ -121,6 +123,10 @@ def _get_chunk_searchlight_RDMs(
         chunks (list): List of chunked center indices.
 
         data_2d (2D numpy array): Flattened brain data, n_observations x n_channels.
+
+        noise (str | Sequence[np.ndarray], optional): Noise estimation method name to estimate the
+        noise with rsatoolbox.data.noise.prec_from_unbalanced OR a list of precision matrixes with
+        one for each center in chunks.
 
         See get_searchlight_RDMs for the other arguments.
 
@@ -147,6 +153,18 @@ def _get_chunk_searchlight_RDMs(
             channel_descriptors={"voxels": center_neighbors},
         )
         center_data.append(ds)
+    if noise:
+        if isinstance(noise, str):
+            # If noise is a string, use the method to estimate noise
+            # This calculates the precision matrix for each center_data dataset
+            calcKwargs["noise"] = prec_from_unbalanced(
+                center_data, obs_desc="events", method=noise
+            )
+        elif isinstance(noise, Sequence):
+            if len(noise) != len(center_data):
+                raise ValueError("Noise sequence length must match chunks length.")
+            else:
+                calcKwargs["noise"] = noise
 
     return calc_rdm(center_data, method=method, descriptor="events", **calcKwargs)
 
@@ -158,6 +176,7 @@ def get_searchlight_RDMs(
     events,
     method="correlation",
     cv_descriptor: Sequence[Hashable] = None,
+    noise_method: str = None,
     batchsize=100,
     maxWorkers=1,
 ) -> RDMs:
@@ -183,6 +202,10 @@ def get_searchlight_RDMs(
 
         cv_descriptor (1D array-like, optional): if provided, n_observations length sequence of
         cross-validation coding for each observation. Defaults to no cross-validation.
+
+        noise_method (str, optional): if provided, the method to use for estimating noise with
+        rsatoolbox.data.noise.prec_from_unbalanced at each center. Only valid if method is
+        'mahalanobis' or 'crossnobis'.
 
         batchsize (int, optional): Searchlight center processing batch size. Defaults to 100.
 
@@ -213,6 +236,7 @@ def get_searchlight_RDMs(
         events=events,
         method=method,
         cv_descriptor=cv_descriptor,
+        noise=noise_method,
     )
     if len(chunked_center) == 1 or maxWorkers == 1:
         # if we have only one chunk or no parallel processing, run it directly
