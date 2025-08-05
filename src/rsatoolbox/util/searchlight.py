@@ -6,6 +6,8 @@ https://github.com/machow/pysearchlight
 
 @author: Daniel Lindh
 """
+from collections.abc import Hashable, Sequence
+from copy import deepcopy
 from functools import partial
 
 import numpy as np
@@ -103,7 +105,16 @@ def get_volume_searchlight(mask, radius=2, threshold=1.0):
     return centers, neighbors
 
 
-def _get_chunk_searchlight_RDMs(chunks, data_2d, centers, neighbors, events, method) -> RDMs:
+def _get_chunk_searchlight_RDMs(
+    chunks,
+    data_2d,
+    centers,
+    neighbors,
+    events: Sequence[Hashable],
+    method: str,
+    cv_descriptor: Sequence[Hashable] = None,
+    **calcKwargs,
+) -> RDMs:
     """Calculates the RDMs for a chunk of searchlight centers.
 
     Args:
@@ -116,6 +127,13 @@ def _get_chunk_searchlight_RDMs(chunks, data_2d, centers, neighbors, events, met
     Returns:
         RDM [rsatoolbox.rdm.RDMs]: RDMs for the chunk of centers.
     """
+    calcKwargs = deepcopy(calcKwargs)
+    obs_descriptors = {"events": events}
+    if cv_descriptor:
+        # Add cv descriptor to Dataset
+        obs_descriptors |= {"cv_descriptor": cv_descriptor}
+        # Ensure it is used by calc_rdm
+        calcKwargs["cv_descriptor"] = "cv_descriptor"
     center_data = []
     for c in chunks:
         # grab this center and neighbors
@@ -125,16 +143,23 @@ def _get_chunk_searchlight_RDMs(chunks, data_2d, centers, neighbors, events, met
         ds = Dataset(
             data_2d[:, center_neighbors],
             descriptors={"center": center},
-            obs_descriptors={"events": events},
+            obs_descriptors=obs_descriptors,
             channel_descriptors={"voxels": center_neighbors},
         )
         center_data.append(ds)
 
-    return calc_rdm(center_data, method=method, descriptor="events")
+    return calc_rdm(center_data, method=method, descriptor="events", **calcKwargs)
 
 
 def get_searchlight_RDMs(
-    data, centers, neighbors, events, method="correlation", batchsize=100, maxWorkers=1
+    data,
+    centers,
+    neighbors,
+    events,
+    method="correlation",
+    cv_descriptor: Sequence[Hashable] = None,
+    batchsize=100,
+    maxWorkers=1,
 ) -> RDMs:
     """Iterates over all the searchlight centers and calculates the RDM
 
@@ -155,6 +180,9 @@ def get_searchlight_RDMs(
 
         method (str, optional): distance metric,
         see rsatoolbox.rdm.calc for options. Defaults to 'correlation'.
+
+        cv_descriptor (1D array-like, optional): if provided, n_observations length sequence of
+        cross-validation coding for each observation. Defaults to no cross-validation.
 
         batchsize (int, optional): Searchlight center processing batch size. Defaults to 100.
 
@@ -184,6 +212,7 @@ def get_searchlight_RDMs(
         neighbors=neighbors,
         events=events,
         method=method,
+        cv_descriptor=cv_descriptor,
     )
     if len(chunked_center) == 1 or maxWorkers == 1:
         # if we have only one chunk or no parallel processing, run it directly
