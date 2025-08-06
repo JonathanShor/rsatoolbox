@@ -179,6 +179,7 @@ def get_searchlight_RDMs(
     noise_method: str = None,
     batchsize=100,
     maxWorkers=1,
+    **calc_rdm_kwargs,
 ) -> RDMs:
     """Iterates over all the searchlight centers and calculates the RDM
 
@@ -212,6 +213,9 @@ def get_searchlight_RDMs(
         maxWorkers (int, optional): maximum number of parallel workers. Defaults to 1, i.e. no
         parallel processing.
 
+        calc_rdm_kwargs (dict, optional): additional keyword arguments to pass to
+        rsatoolbox.rdm.calc.calc_rdm.
+
     Returns:
         RDM [rsatoolbox.rdm.RDMs]: RDMs object with the RDM for each searchlight
                               the RDM.rdm_descriptors['voxel_index']
@@ -237,6 +241,7 @@ def get_searchlight_RDMs(
         method=method,
         cv_descriptor=cv_descriptor,
         noise=noise_method,
+        **calc_rdm_kwargs,
     )
     if len(chunked_center) == 1 or maxWorkers == 1:
         # if we have only one chunk or no parallel processing, run it directly
